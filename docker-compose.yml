@@ -1,0 +1,101 @@
+version: "3"
+
+networks:
+    wordpress-network:
+        driver: bridge
+
+services:
+    nginx:
+        build:
+            context: ./nginx
+            dockerfile: Dockerfile
+        ports:
+            - 8080:80
+        depends_on:
+            - wordpress1
+            - wordpress2
+            - wordpress3
+        networks:
+            - wordpress-network
+
+    mysql-master:
+        image: mysql:latest
+        container_name: mysql-master-wordpress
+        tty: true
+        ports:
+            - 3306:3306
+        volumes:
+            - "./var/libclea/mysql-master/:/var/lib/mysql"
+        command: --server-id=1 --log-bin=mysql-bin --binlog-do-db=wordpress --binlog-do-db=wordpress2 --binlog-do-db=wordpress3 --log-bin-index=mysql-bin.index --log-bin-trust-function-creators=1
+        environment:
+            MYSQL_ROOT_PASSWORD: password12
+            MYSQL_DATABASE: wordpress
+            MYSQL_LOG_SLAVE_UPDATES: 1
+        networks:
+            - wordpress-network
+
+    mysql-slave:
+        image: mysql:latest
+        container_name: mysql-slave-wordpress
+        tty: true
+        volumes:
+            - "./var/libclea/mysql-slave/:/var/lib/mysql"
+        command: --server-id=2 --log-bin=mysql-bin --binlog-do-db=wordpress --binlog-do-db=wordpress2 --binlog-do-db=wordpress3 --log-bin-index=mysql-bin.index --log-bin-trust-function-creators=1
+        environment:
+            MYSQL_ROOT_PASSWORD: password12
+            MYSQL_DATABASE: wordpress
+            MYSQL_MASTER_HOST: mysql-master-wordpress
+            MYSQL_MASTER_PORT: 3306
+            MYSQL_LOG_SLAVE_UPDATES: 1
+        networks:
+            - wordpress-network
+
+    wordpress1:
+        image: wordpress:latest
+        container_name: wordpress1
+        ports:
+            - "8082:80"
+        volumes:
+            - "./var/www/html/wordpress1:/var/www/html"
+        depends_on:
+            - mysql-master
+        networks:
+            - wordpress-network
+
+    wordpress2:
+        image: wordpress:latest
+        container_name: wordpress2
+        ports:
+            - "8083:80"
+        volumes:
+            - "./var/www/html/wordpress2:/var/www/html"
+        depends_on:
+            - mysql-master
+        networks:
+            - wordpress-network
+
+    wordpress3:
+        image: wordpress:latest
+        container_name: wordpress3
+        ports:
+            - "8084:80"
+        volumes:
+            - "./var/www/html/wordpress3:/var/www/html"
+        depends_on:
+            - mysql-master
+        networks:
+            - wordpress-network
+
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin:latest
+        container_name: ds-phpmyadmin
+        ports:
+            - "8081:80"
+        environment:
+            PMA_HOST: mysql-master-wordpress, mysql-slave-wordpress
+            PMA_ARBITRARY: 1
+        depends_on:
+            - mysql-master
+            - mysql-slave
+        networks:
+            - wordpress-network
